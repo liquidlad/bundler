@@ -7,6 +7,7 @@ const links = [
   { href: "/", label: "Dashboard" },
   { href: "/launch", label: "Launch" },
   { href: "/wallets", label: "Wallets" },
+  { href: "/sell", label: "Sell" },
 ];
 
 export default function Navbar() {

@@ -226,6 +226,44 @@ export default function LaunchPage() {
               placeholder="https://... or upload coming soon"
             />
           </div>
+          {/* Socials */}
+          <div>
+            <label className="label">Twitter / X Link</label>
+            <input
+              type="text"
+              className="input-field"
+              value={metadata.twitter || ""}
+              onChange={(e) =>
+                setMetadata({ ...metadata, twitter: e.target.value })
+              }
+              placeholder="https://x.com/yourtoken"
+            />
+          </div>
+          <div>
+            <label className="label">Website</label>
+            <input
+              type="text"
+              className="input-field"
+              value={metadata.website || ""}
+              onChange={(e) =>
+                setMetadata({ ...metadata, website: e.target.value })
+              }
+              placeholder="https://yourtoken.fun"
+            />
+          </div>
+          <div>
+            <label className="label">Telegram</label>
+            <input
+              type="text"
+              className="input-field"
+              value={metadata.telegram || ""}
+              onChange={(e) =>
+                setMetadata({ ...metadata, telegram: e.target.value })
+              }
+              placeholder="https://t.me/yourtoken (optional)"
+            />
+          </div>
+
           {metadata.imageUrl && (
             <div className="mt-2">
               <img

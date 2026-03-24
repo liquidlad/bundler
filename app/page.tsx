@@ -15,7 +15,8 @@ export default function Dashboard() {
 
   async function loadData() {
     try {
-      const res = await fetch("/api/wallets");
+      // Fetch real on-chain balances
+      const res = await fetch("/api/balances");
       const data = await res.json();
       setWallets(data.wallets || []);
       setMainWallet(data.mainWallet || null);

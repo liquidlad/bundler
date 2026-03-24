@@ -6,11 +6,48 @@ import type { WalletInfo } from "../types";
 
 const WALLETS_DIR = path.join(process.cwd(), ".wallets");
 const WALLETS_FILE = path.join(WALLETS_DIR, "wallets.json");
+const BACKUPS_DIR = path.join(WALLETS_DIR, "backups");
 
 function ensureDir() {
   if (!existsSync(WALLETS_DIR)) {
     mkdirSync(WALLETS_DIR, { recursive: true });
   }
+  if (!existsSync(BACKUPS_DIR)) {
+    mkdirSync(BACKUPS_DIR, { recursive: true });
+  }
+}
+
+/**
+ * Auto-backup existing wallets before overwriting.
+ * Backups are timestamped and never deleted automatically.
+ */
+function backupWallets() {
+  ensureDir();
+  if (!existsSync(WALLETS_FILE)) return;
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupFile = path.join(BACKUPS_DIR, `wallets-${timestamp}.json`);
+  const data = readFileSync(WALLETS_FILE, "utf-8");
+  writeFileSync(backupFile, data);
+}
+
+export function listBackups(): string[] {
+  ensureDir();
+  if (!existsSync(BACKUPS_DIR)) return [];
+  const { readdirSync } = require("fs");
+  return readdirSync(BACKUPS_DIR)
+    .filter((f: string) => f.endsWith(".json"))
+    .sort()
+    .reverse();
+}
+
+export function restoreBackup(filename: string): WalletInfo[] {
+  const backupFile = path.join(BACKUPS_DIR, filename);
+  if (!existsSync(backupFile)) throw new Error(`Backup not found: ${filename}`);
+  const data = readFileSync(backupFile, "utf-8");
+  const wallets = JSON.parse(data);
+  saveWallets(wallets);
+  return wallets;
 }
 
 export function generateWallets(count: number): WalletInfo[] {
@@ -29,6 +66,7 @@ export function generateWallets(count: number): WalletInfo[] {
 
 export function saveWallets(wallets: WalletInfo[]) {
   ensureDir();
+  backupWallets(); // Always backup before saving
   writeFileSync(WALLETS_FILE, JSON.stringify(wallets, null, 2));
 }
 
