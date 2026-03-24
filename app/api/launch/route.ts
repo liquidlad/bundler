@@ -7,17 +7,18 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const {
     metadata,
-    buyAmountSol = 0.1,
+    devBuyAmountSol = 0.5,
+    bundleBuyAmountSol = 0.1,
     buyerWalletCount = 6,
     jitoTipSol = 0.001,
   } = body as {
     metadata: TokenMetadata;
-    buyAmountSol: number;
+    devBuyAmountSol: number;
+    bundleBuyAmountSol: number;
     buyerWalletCount: number;
     jitoTipSol: number;
   };
 
-  // Validate metadata
   if (!metadata?.name || !metadata?.symbol) {
     return NextResponse.json(
       { error: "Token name and symbol are required" },
@@ -25,7 +26,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Load main wallet
   const mainWalletKey = process.env.MAIN_WALLET_PRIVATE_KEY;
   if (!mainWalletKey) {
     return NextResponse.json(
@@ -52,7 +52,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Load buyer wallets
   const allWallets = loadWallets();
   if (allWallets.length === 0) {
     return NextResponse.json(
@@ -68,7 +67,8 @@ export async function POST(req: NextRequest) {
       metadata,
       mainWallet,
       buyerWallets,
-      buyAmountSol,
+      devBuyAmountSol,
+      bundleBuyAmountSol,
       jitoTipSol
     );
 

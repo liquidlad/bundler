@@ -12,15 +12,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // 1. Scrape the tweet
+    // 1. Scrape the tweet (now includes images via fxtwitter)
     const tweet = await scrapeTweet(tweetUrl);
 
-    // 2. Extract metadata using AI
+    // 2. Extract metadata using AI, pass first image if available
+    const imageUrl = tweet.mediaUrls.length > 0 ? tweet.mediaUrls[0] : undefined;
     const result = await extractMetadataFromTweet(
       tweetUrl,
       tweet.text,
-      tweet.authorUsername
+      tweet.authorUsername,
+      imageUrl
     );
+
+    // Ensure the image URL is set on the metadata
+    if (imageUrl && !result.metadata.imageUrl) {
+      result.metadata.imageUrl = imageUrl;
+    }
 
     return NextResponse.json(result);
   } catch (error: any) {

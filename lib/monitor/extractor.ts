@@ -3,15 +3,63 @@ import { getConfig } from "../config";
 import type { ExtractionResult } from "../types";
 
 /**
+ * Extract tweet ID from various Twitter/X URL formats.
+ */
+function extractTweetId(url: string): string {
+  const match = url.match(/status\/(\d+)/);
+  if (!match) throw new Error("Could not extract tweet ID from URL");
+  return match[1];
+}
+
+/**
  * Scrape a tweet URL and extract its text + images.
- * Uses a public embed/oembed approach to avoid needing API keys.
+ * Uses fxtwitter API (public, no auth needed) which returns full tweet data including media.
+ * Falls back to Twitter oembed if fxtwitter fails.
  */
 export async function scrapeTweet(tweetUrl: string): Promise<{
   text: string;
   authorUsername: string;
   mediaUrls: string[];
 }> {
-  // Use Twitter's publish API to get tweet content
+  const tweetId = extractTweetId(tweetUrl);
+
+  // Try fxtwitter API first — returns full tweet data including media
+  try {
+    const fxUrl = `https://api.fxtwitter.com/status/${tweetId}`;
+    const response = await fetch(fxUrl, {
+      headers: { "User-Agent": "BundlerBot/1.0" },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const tweet = data.tweet;
+
+      const mediaUrls: string[] = [];
+      if (tweet.media?.photos) {
+        for (const photo of tweet.media.photos) {
+          if (photo.url) mediaUrls.push(photo.url);
+        }
+      }
+      // Also check for media in all format
+      if (tweet.media?.all) {
+        for (const item of tweet.media.all) {
+          if (item.type === "photo" && item.url && !mediaUrls.includes(item.url)) {
+            mediaUrls.push(item.url);
+          }
+        }
+      }
+
+      return {
+        text: tweet.text || "",
+        authorUsername: tweet.author?.screen_name || tweet.author?.name || "",
+        mediaUrls,
+      };
+    }
+  } catch (e) {
+    // Fall through to oembed
+  }
+
+  // Fallback: Twitter oembed (no images but at least gets text)
   const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(tweetUrl)}&omit_script=true`;
   const response = await fetch(oembedUrl);
 
@@ -20,14 +68,10 @@ export async function scrapeTweet(tweetUrl: string): Promise<{
   }
 
   const data = await response.json();
-  // Extract text from the HTML response
   const htmlContent: string = data.html || "";
-  // Strip HTML tags to get plain text
   const text = htmlContent.replace(/<[^>]*>/g, "").trim();
   const authorUsername = data.author_name || "";
 
-  // For images, we'll need the user to provide them or use a different scraping method
-  // The oembed API doesn't return media URLs directly
   return {
     text,
     authorUsername,

@@ -15,7 +15,8 @@ export default function LaunchPage() {
     description: "",
     imageUrl: "",
   });
-  const [buyAmount, setBuyAmount] = useState("0.1");
+  const [devBuyAmount, setDevBuyAmount] = useState("0.5");
+  const [bundleBuyAmount, setBundleBuyAmount] = useState("0.1");
   const [walletCount, setWalletCount] = useState("6");
   const [jitoTip, setJitoTip] = useState("0.001");
   const [loading, setLoading] = useState(false);
@@ -65,7 +66,8 @@ export default function LaunchPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           metadata,
-          buyAmountSol: parseFloat(buyAmount),
+          devBuyAmountSol: parseFloat(devBuyAmount),
+          bundleBuyAmountSol: parseFloat(bundleBuyAmount),
           buyerWalletCount: parseInt(walletCount),
           jitoTipSol: parseFloat(jitoTip),
         }),
@@ -308,29 +310,69 @@ export default function LaunchPage() {
             — {metadata.name}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* Dev Buy (Main Wallet) */}
+          <div
+            className="p-4 rounded-lg border"
+            style={{ borderColor: "var(--border)", background: "var(--bg-secondary)" }}
+          >
+            <h4 className="text-sm font-semibold mb-3" style={{ color: "var(--accent)" }}>
+              Dev Buy (Main Wallet)
+            </h4>
+            <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>
+              Your main wallet creates the token and makes the first buy.
+            </p>
             <div>
-              <label className="label">Buy Amount (SOL per wallet)</label>
+              <label className="label">Dev Buy Amount (SOL)</label>
               <input
                 type="number"
                 className="input-field"
-                value={buyAmount}
-                onChange={(e) => setBuyAmount(e.target.value)}
+                value={devBuyAmount}
+                onChange={(e) => setDevBuyAmount(e.target.value)}
                 step="0.01"
                 min="0.01"
               />
             </div>
-            <div>
-              <label className="label">Buyer Wallets (first buy)</label>
-              <input
-                type="number"
-                className="input-field"
-                value={walletCount}
-                onChange={(e) => setWalletCount(e.target.value)}
-                min="1"
-                max="8"
-              />
+          </div>
+
+          {/* Bundle Buy (Buyer Wallets) */}
+          <div
+            className="p-4 rounded-lg border"
+            style={{ borderColor: "var(--border)", background: "var(--bg-secondary)" }}
+          >
+            <h4 className="text-sm font-semibold mb-3" style={{ color: "var(--accent)" }}>
+              Bundle Buy (Buyer Wallets)
+            </h4>
+            <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>
+              Additional wallets that buy in the same block as the dev buy.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Buy Amount per Wallet (SOL)</label>
+                <input
+                  type="number"
+                  className="input-field"
+                  value={bundleBuyAmount}
+                  onChange={(e) => setBundleBuyAmount(e.target.value)}
+                  step="0.01"
+                  min="0.01"
+                />
+              </div>
+              <div>
+                <label className="label">Number of Wallets</label>
+                <input
+                  type="number"
+                  className="input-field"
+                  value={walletCount}
+                  onChange={(e) => setWalletCount(e.target.value)}
+                  min="1"
+                  max="8"
+                />
+              </div>
             </div>
+          </div>
+
+          {/* Jito + Cost Summary */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Jito Tip (SOL)</label>
               <input
@@ -347,7 +389,8 @@ export default function LaunchPage() {
               <div className="input-field flex items-center" style={{ cursor: "default" }}>
                 <span className="font-bold" style={{ color: "var(--accent)" }}>
                   {(
-                    parseFloat(buyAmount) * (parseInt(walletCount) + 1) +
+                    parseFloat(devBuyAmount) +
+                    parseFloat(bundleBuyAmount) * parseInt(walletCount) +
                     parseFloat(jitoTip)
                   ).toFixed(4)}{" "}
                   SOL
@@ -356,6 +399,7 @@ export default function LaunchPage() {
             </div>
           </div>
 
+          {/* Summary */}
           <div
             className="p-4 rounded-lg border text-sm"
             style={{
@@ -364,10 +408,12 @@ export default function LaunchPage() {
               color: "var(--text-secondary)",
             }}
           >
-            This will create <strong style={{ color: "var(--text-primary)" }}>${metadata.symbol}</strong> on
-            Pump.fun and buy with{" "}
-            <strong style={{ color: "var(--text-primary)" }}>{walletCount} wallets</strong> +
-            your main wallet in the same block.
+            <strong style={{ color: "var(--text-primary)" }}>${metadata.symbol}</strong> launch breakdown:
+            <ul className="mt-2 space-y-1">
+              <li>Dev buy: <strong style={{ color: "var(--text-primary)" }}>{devBuyAmount} SOL</strong> from main wallet</li>
+              <li>Bundle buy: <strong style={{ color: "var(--text-primary)" }}>{bundleBuyAmount} SOL</strong> x {walletCount} wallets = <strong style={{ color: "var(--text-primary)" }}>{(parseFloat(bundleBuyAmount) * parseInt(walletCount)).toFixed(4)} SOL</strong></li>
+              <li>Jito tip: {jitoTip} SOL</li>
+            </ul>
           </div>
 
           <div className="flex gap-3 pt-2">
