@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
       privateKey: mainWalletKey,
       label: "main",
       balanceSol: 0,
+      enabled: true,
     };
   } catch (e) {
     return NextResponse.json(
@@ -53,14 +54,15 @@ export async function POST(req: NextRequest) {
   }
 
   const allWallets = loadWallets();
-  if (allWallets.length === 0) {
+  const enabledWallets = allWallets.filter((w) => w.enabled !== false);
+  if (enabledWallets.length === 0) {
     return NextResponse.json(
-      { error: "No buyer wallets generated. Go to Wallets page first." },
+      { error: "No enabled buyer wallets. Go to Wallets page to enable them." },
       { status: 400 }
     );
   }
 
-  const buyerWallets = allWallets.slice(0, buyerWalletCount);
+  const buyerWallets = enabledWallets.slice(0, buyerWalletCount);
 
   try {
     const result = await launchTokenBundled(

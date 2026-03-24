@@ -23,9 +23,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No buyer wallets. Generate them first." }, { status: 400 });
     }
 
+    // Only fund enabled wallets (or specific indices if provided)
     const walletsToFund = walletIndices
       ? walletIndices.map((i: number) => allWallets[i]).filter(Boolean)
-      : allWallets;
+      : allWallets.filter((w) => w.enabled !== false);
 
     const amount = parseFloat(amountPerWallet) || config.defaultBuyAmountSol;
 

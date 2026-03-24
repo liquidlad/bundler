@@ -24,6 +24,7 @@ export interface WalletInfo {
   privateKey: string;
   label: string;
   balanceSol: number;
+  enabled: boolean;
 }
 
 // === Launch Config ===

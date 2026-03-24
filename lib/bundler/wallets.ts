@@ -107,6 +107,7 @@ export function generateWallets(count: number): WalletInfo[] {
       privateKey: bs58.encode(kp.secretKey),
       label: `buyer-${i + 1}`,
       balanceSol: 0,
+      enabled: true,
     });
   }
   return wallets;
