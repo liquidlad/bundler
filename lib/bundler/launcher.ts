@@ -251,175 +251,118 @@ export async function launchTokenBundled(
     createTx.sign(signerKeypair, mintKeypair);
 
     // 5. Build TX 1-4: Buyer wallet buys
-    const activeBuyers = buyerWallets.slice(0, 4);
-    const buyerTxs: Transaction[] = [];
+    const activeBuyers = buyerWallets; // Use ALL enabled buyer wallets
 
-    if (activeBuyers.length > 0 && bundleBuyAmountSol > 0) {
-      console.log(`Building ${activeBuyers.length} buyer buy transactions...`);
+    // 5. Send create+dev buy directly first (this works reliably)
+    console.log("Sending create + dev buy transaction directly...");
+    const createSig = await connection.sendRawTransaction(createTx.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3,
+    });
+    await connection.confirmTransaction(createSig, "confirmed");
+    console.log("Token created! Mint:", mintAddress, "Sig:", createSig);
 
-      const buySolLamports = new BN(Math.floor(bundleBuyAmountSol * 1e9));
-
-      // Calculate expected curve state after dev buy
-      const postDevTokenReserves = INITIAL_VIRTUAL_TOKEN_RESERVES.sub(
-        calculateTokensFromSol(
-          INITIAL_VIRTUAL_TOKEN_RESERVES,
-          INITIAL_VIRTUAL_SOL_RESERVES,
-          devSolLamports
-        )
-      );
-      const postDevSolReserves = INITIAL_VIRTUAL_SOL_RESERVES.add(devSolLamports);
-
-      let currentTokenReserves = postDevTokenReserves;
-      let currentSolReserves = postDevSolReserves;
-
-      for (let i = 0; i < activeBuyers.length; i++) {
-        const buyerKeypair = getKeypair(activeBuyers[i]);
-
-        const expectedTokens = calculateTokensFromSol(
-          currentTokenReserves,
-          currentSolReserves,
-          buySolLamports
-        );
-        const minTokens = expectedTokens.div(new BN(100));
-
-        currentTokenReserves = currentTokenReserves.sub(expectedTokens);
-        currentSolReserves = currentSolReserves.add(buySolLamports);
-
-        const buyIxs = buildBuyInstructionForBundle(
-          mintKeypair.publicKey,
-          buyerKeypair.publicKey,
-          buySolLamports,
-          minTokens
-        );
-
-        const buyTx = new Transaction();
-        buyTx.add(...buyIxs);
-        buyTx.feePayer = buyerKeypair.publicKey;
-        buyTx.recentBlockhash = blockhash;
-        buyTx.sign(buyerKeypair);
-
-        buyerTxs.push(buyTx);
-      }
-    }
-
-    // 6. Simulate create tx first to catch errors early
-    console.log("Simulating create transaction...");
-    try {
-      await connection.simulateTransaction(createTx);
-      console.log("Simulation passed");
-    } catch (simErr: any) {
-      console.error("Simulation failed:", simErr.message);
-      // Don't block — Jito might still work, simulation can fail for new accounts
-    }
-
-    // 7. Submit everything as ONE Jito bundle
-    console.log(`Submitting Jito bundle: 1 create + ${buyerTxs.length} buys...`);
-
-    const allTxsBase58 = [
-      bs58.encode(createTx.serialize()),
-      ...buyerTxs.map((tx) => bs58.encode(tx.serialize())),
-    ];
-
-    // Try multiple Jito endpoints for reliability
-    const jitoEndpoints = [
-      "https://mainnet.block-engine.jito.wtf/api/v1/bundles",
-      "https://amsterdam.mainnet.block-engine.jito.wtf/api/v1/bundles",
-      "https://frankfurt.mainnet.block-engine.jito.wtf/api/v1/bundles",
-      "https://ny.mainnet.block-engine.jito.wtf/api/v1/bundles",
-      "https://tokyo.mainnet.block-engine.jito.wtf/api/v1/bundles",
-    ];
-
-    let jitoSuccess = false;
-    let jitoError = "";
-
-    for (const endpoint of jitoEndpoints) {
-      try {
-        const jitoResponse = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "sendBundle",
-            params: [allTxsBase58],
-          }),
-        });
-
-        const jitoResult = await jitoResponse.json();
-
-        if (!jitoResult.error) {
-          console.log("Jito bundle accepted via", endpoint);
-          console.log("Bundle ID:", jitoResult.result);
-          jitoSuccess = true;
-          break;
-        } else {
-          jitoError = JSON.stringify(jitoResult.error);
-          console.log("Jito rejected at", endpoint, ":", jitoError);
-        }
-      } catch (e: any) {
-        jitoError = e.message;
-        console.log("Jito error at", endpoint, ":", e.message);
-      }
-    }
-
-    if (!jitoSuccess) {
-      // Fallback: send create tx directly, then buys individually
-      console.log("All Jito endpoints failed. Sending transactions directly...");
-
-      const createSig = await connection.sendRawTransaction(createTx.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3,
-      });
-      await connection.confirmTransaction(createSig, "confirmed");
-      console.log("Create confirmed:", createSig);
-
-      for (const buyTx of buyerTxs) {
-        try {
-          await connection.sendRawTransaction(buyTx.serialize(), {
-            skipPreflight: true,
-            maxRetries: 3,
-          });
-        } catch (e: any) {
-          console.error("Individual buy failed:", e.message);
-        }
-      }
-
+    // 8. Send ALL buyer buys concurrently (not limited to 4)
+    if (activeBuyers.length === 0 || bundleBuyAmountSol <= 0) {
       return {
         success: true,
         mintAddress,
         txSignature: createSig,
-        error: `Token launched but Jito failed (${jitoError}). Buys sent individually — may not be in same block.`,
         timestamp,
       };
     }
 
-    // Wait for on-chain confirmation (poll for mint account)
-    const createSig = bs58.encode(createTx.signature!);
-    console.log("Jito accepted. Waiting for on-chain confirmation...");
+    console.log(`Building ${activeBuyers.length} buyer buys using SDK...`);
 
-    let confirmed = false;
-    for (let attempt = 0; attempt < 20; attempt++) {
-      await new Promise((r) => setTimeout(r, 500)); // 500ms between checks
-      const mintAccount = await connection.getAccountInfo(
-        mintKeypair.publicKey
+    // Fetch bonding curve state ONCE (reuse for all buyers)
+    const { blockhash: freshBlockhash } = await connection.getLatestBlockhash("confirmed");
+    const feeConfig = await onlineSdk.fetchFeeConfig();
+    const firstBuyer = getKeypair(activeBuyers[0]);
+    const { bondingCurveAccountInfo, bondingCurve } =
+      await onlineSdk.fetchBuyState(
+        mintKeypair.publicKey,
+        firstBuyer.publicKey,
+        TOKEN_2022_PROGRAM_ID
       );
-      if (mintAccount) {
-        confirmed = true;
-        console.log("Token confirmed on-chain! Mint:", mintAddress);
-        break;
-      }
-    }
 
-    if (!confirmed) {
-      // Bundle was accepted but never landed
-      console.error("Bundle was accepted by Jito but never landed on-chain");
+    const buySolLamports = new BN(Math.floor(bundleBuyAmountSol * 1e9));
+    const buyTokenAmount = getBuyTokenAmountFromSolAmount({
+      global,
+      feeConfig,
+      mintSupply: bondingCurve.tokenTotalSupply,
+      bondingCurve,
+      amount: buySolLamports,
+    });
+
+    // Build all buyer txs (fetch associatedUserAccountInfo per buyer but reuse bonding curve)
+    const buyPromises = activeBuyers.map(async (buyer, i) => {
+      try {
+        const buyerKeypair = getKeypair(buyer);
+        const { associatedUserAccountInfo } =
+          await onlineSdk.fetchBuyState(
+            mintKeypair.publicKey,
+            buyerKeypair.publicKey,
+            TOKEN_2022_PROGRAM_ID
+          );
+
+        const buyIxs = await PUMP_SDK.buyInstructions({
+          global,
+          bondingCurveAccountInfo,
+          bondingCurve,
+          associatedUserAccountInfo,
+          mint: mintKeypair.publicKey,
+          user: buyerKeypair.publicKey,
+          solAmount: buySolLamports,
+          amount: buyTokenAmount,
+          slippage: 50,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        });
+
+        const buyTx = new Transaction();
+        buyTx.add(...buyIxs);
+        buyTx.feePayer = buyerKeypair.publicKey;
+        buyTx.recentBlockhash = freshBlockhash;
+        buyTx.sign(buyerKeypair);
+
+        return { tx: buyTx, label: `buyer-${i + 1}` };
+      } catch (e: any) {
+        console.error(`Failed to build buy tx for buyer-${i + 1}:`, e.message);
+        return null;
+      }
+    });
+
+    const builtTxs = (await Promise.all(buyPromises)).filter(Boolean) as { tx: Transaction; label: string }[];
+
+    if (builtTxs.length === 0) {
       return {
-        success: false,
+        success: true,
         mintAddress,
-        error: "Jito bundle was accepted but dropped — token was NOT created. Try again with a higher Jito tip.",
+        txSignature: createSig,
+        error: "Token created but buyer buy instructions failed to build. Buy manually on pump.fun.",
         timestamp,
       };
     }
+
+    // Send ALL buyer buys concurrently (fire and forget — don't wait sequentially)
+    console.log(`Sending ${builtTxs.length} buyer buys concurrently...`);
+    const sendPromises = builtTxs.map(async ({ tx, label }) => {
+      try {
+        const sig = await connection.sendRawTransaction(tx.serialize(), {
+          skipPreflight: true,
+          maxRetries: 5,
+        });
+        console.log(`${label} buy sent: ${sig}`);
+        return { label, sig, success: true };
+      } catch (e: any) {
+        console.error(`${label} buy failed: ${e.message}`);
+        return { label, error: e.message, success: false };
+      }
+    });
+
+    const buyResults = await Promise.all(sendPromises);
+    const succeeded = buyResults.filter(r => r.success).length;
+    const failed = buyResults.filter(r => !r.success).length;
+    console.log(`Buyer buys: ${succeeded} sent, ${failed} failed`);
 
     console.log("Launch complete! Mint:", mintAddress);
 
