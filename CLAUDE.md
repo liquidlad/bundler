@@ -47,26 +47,29 @@ Phase 5 Flow (future auto-monitor):
 - **Wallet vault** — All keys backed up to ~/.bundler-vault/ (outside project). Append-only all-keys-ever.json log. Keys are never lost.
 - **Helius RPC** — Using Helius free tier for reliable Solana RPC.
 
-## Current Status (2026-03-23)
-- **Phase 1 DONE:** Token creation + dev buy works via official @pump-fun/pump-sdk (v1.31.0)
+## Current Status (2026-03-24)
+- **Phase 1 DONE:** Token creation + dev buy via official @pump-fun/pump-sdk (v1.31.0)
 - **Phase 2 DONE:** Tweet paste → fxtwitter scrape → Claude AI extract → preview/edit → launch
 - **Phase 3 DONE:** Wallet gen, fund (stealth mode), gather, balance check, enable/disable toggles, vault backup
-- **Phase 4 PARTIAL:** Sell page built (uses SDK), manual sell by mint address
-- **Jito bundles:** Accepted but dropping — likely issue with manually constructed buyer buy instructions (wrong discriminator or accounts for V2/Token2022). Create+dev buy alone works fine.
+- **Phase 4 MOSTLY DONE:** Sell page, per-wallet sell buttons, consolidate-and-sell, position tracker with real P&L
+- **Buyer buys:** Create+dev buy sends first, then all buyer buys fire concurrently ~2-3s later using SDK. Not same block but close.
+- **Collaborated via:** github.com/better-builders added as collaborator for cross-machine work
 
 ## Known Issues / Next Steps
-1. **Jito bundles dropping** — Create+dev buy works but buyer buy instructions built manually may have wrong account layout for the V2 program. Need to debug by testing a single buy instruction in isolation. Consider using SDK's `buyInstructions()` after creating token (two-step: create first, then bundle buys).
+1. **Not same-block** — Buyer buys land 1-2 blocks after create. True same-block needs Jito bundles with correct V2 buy instructions, which we haven't solved yet.
 2. **Auto-dump on profit** — Not built yet. Future Phase 4.
 3. **Auto Twitter monitoring** — Not built yet. Future Phase 5.
 4. **Image upload** — Works from tweet extraction (fxtwitter). Manual image upload from file not yet supported.
+5. **OneDrive .next cache** — `.next` build dir gets corrupted by OneDrive sync. Need to `rm -rf .next` before each dev server start.
 
 ## Build Phases
-1. ~~**Phase 1 — Core Bundler:**~~ DONE — official pump-fun SDK, wallet gen, create + dev buy
+1. ~~**Phase 1 — Core Bundler:**~~ DONE — official pump-fun SDK, wallet gen, create + dev buy + buyer buys
 2. ~~**Phase 2 — Tweet-to-Launch:**~~ DONE — fxtwitter + Claude AI extraction
 3. ~~**Phase 3 — Wallet Management:**~~ DONE — fund/gather/balances/toggles/stealth/vault
-4. **Phase 4 — Sell + Anti-Detection:** Sell page done. Auto-dump + holder distribution TODO.
-5. **Phase 5 (future) — Auto-Monitor:** Automated Twitter polling for watched accounts
-6. **Phase 6 (future) — Additional features:** TBD
+4. ~~**Phase 4 — Sell + Position:**~~ MOSTLY DONE — sell page, per-wallet sell, consolidate+sell, position tracker with bonding curve math, auto-refresh
+5. **Phase 5 (future) — Same-Block Bundling:** Jito bundles with correct V2 buy instructions
+6. **Phase 6 (future) — Auto-Monitor:** Automated Twitter polling for watched accounts
+7. **Phase 7 (future) — Auto-Dump:** Sell automatically at profit target
 
 ## Research Notes
 
@@ -102,12 +105,14 @@ Phase 5 Flow (future auto-monitor):
 - Latency: 200-500ms for structured extraction
 - Regex pre-processing for $TICKER patterns can supplement LLM
 
-### PumpPortal API (pumpportal.fun)
-- Create + buy in single atomic Jito bundle
-- Up to 5 transactions per bundle (create + 4 wallet buys)
-- Lightning API (server-signed) or Local API (client-signed)
-- 0.5% trading fee on buys, NO additional creation fee
-- Token metadata: name, symbol, image (IPFS), description, socials
+### Official @pump-fun/pump-sdk (npm)
+- v1.31.0 — actively maintained, multiple releases per month
+- `createV2AndBuyInstructions()` — atomic create + dev buy in one tx
+- `buyInstructions()` — buy on bonding curve with proper state
+- `sellInstructions()` — sell with TOKEN_2022 support
+- `getBuyTokenAmountFromSolAmount()` / `getSellSolAmountFromTokenAmount()` — price math
+- `bondingCurveMarketCap()` — market cap calculation
+- PumpPortal was tried first but their API was broken (400 on all creates with non-zero amounts). Dropped in favor of official SDK.
 
 ## Security Rules
 - NEVER commit private keys or seed phrases
@@ -130,22 +135,33 @@ bundler/
 ├── app/                           # Next.js App Router (web UI)
 │   ├── layout.tsx                 # Root layout with navbar
 │   ├── page.tsx                   # Dashboard — stats, wallet overview, recent launches
-│   ├── launch/page.tsx            # Launch flow — paste tweet → AI extract → approve → launch
-│   ├── wallets/page.tsx           # Wallet management — generate, view balances
+│   ├── launch/page.tsx            # Launch flow — paste tweet → AI extract → approve → launch → redirect to position
+│   ├── position/page.tsx          # Position tracker — real-time P&L, bonding curve math, per-wallet sell buttons
+│   ├── wallets/page.tsx           # Wallet management — generate, fund, gather, enable/disable toggles
+│   ├── sell/page.tsx              # Manual sell page — sell by mint address, configurable %
 │   ├── globals.css                # Global styles (dark theme)
 │   └── api/
-│       ├── launch/route.ts        # POST — create token + bundled buy via PumpPortal
-│       ├── wallets/route.ts       # GET/POST — load/generate wallets
+│       ├── launch/route.ts        # POST — create token + dev buy + buyer buys
+│       ├── wallets/route.ts       # GET/POST — load/generate/toggle wallets
 │       ├── balances/route.ts      # GET — refresh all wallet balances
-│       └── extract/route.ts       # POST — scrape tweet + AI metadata extraction
+│       ├── extract/route.ts       # POST — scrape tweet + AI metadata extraction
+│       ├── fund/route.ts          # POST — fund buyer wallets (stealth mode)
+│       ├── gather/route.ts        # POST — gather SOL back to main wallet
+│       ├── sell/route.ts          # POST — sell from all wallets individually
+│       ├── sell-all/route.ts      # POST — consolidate all tokens → main wallet → sell
+│       ├── sell-wallet/route.ts   # POST — sell from a specific wallet
+│       └── position/route.ts     # POST — position data (balances, bonding curve, P&L)
 ├── lib/                           # Core backend logic
 │   ├── config.ts                  # Env var loader
 │   ├── types/index.ts             # Shared TypeScript types
 │   ├── bundler/
-│   │   ├── launcher.ts            # PumpPortal API — create + bundled buy
-│   │   └── wallets.ts             # Wallet generation, storage, balance checking
+│   │   ├── launcher.ts            # Official pump-fun SDK — create + dev buy + buyer buys
+│   │   ├── seller.ts              # Sell logic — individual, consolidate+sell
+│   │   ├── funder.ts              # Fund/gather wallets (stealth mode)
+│   │   └── wallets.ts             # Wallet generation, storage, vault backup, enable/disable
 │   └── monitor/
-│       └── extractor.ts           # Tweet scraping + Claude AI metadata extraction
-└── components/
-    └── Navbar.tsx                 # Navigation bar component
+│       └── extractor.ts           # fxtwitter scraping + Claude AI metadata extraction
+├── components/
+│   └── Navbar.tsx                 # Navigation bar (Dashboard, Launch, Position, Wallets, Sell)
+└── HANDOFF-NOTES.md               # Cross-machine development notes
 ```
