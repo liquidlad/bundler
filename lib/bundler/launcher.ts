@@ -375,7 +375,7 @@ export async function launchTokenBundled(
       for (const buyTx of buyerTxs) {
         try {
           await connection.sendRawTransaction(buyTx.serialize(), {
-            skipPreflight: false,
+            skipPreflight: true,
             maxRetries: 3,
           });
         } catch (e: any) {
@@ -392,8 +392,35 @@ export async function launchTokenBundled(
       };
     }
 
-    // Get create tx signature
+    // Wait for on-chain confirmation (poll for mint account)
     const createSig = bs58.encode(createTx.signature!);
+    console.log("Jito accepted. Waiting for on-chain confirmation...");
+
+    let confirmed = false;
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await new Promise((r) => setTimeout(r, 2000)); // 2s between checks
+      const mintAccount = await connection.getAccountInfo(
+        mintKeypair.publicKey
+      );
+      if (mintAccount) {
+        confirmed = true;
+        console.log("Token confirmed on-chain! Mint:", mintAddress);
+        break;
+      }
+      console.log(`Waiting... attempt ${attempt + 1}/30`);
+    }
+
+    if (!confirmed) {
+      // Bundle was accepted but never landed
+      console.error("Bundle was accepted by Jito but never landed on-chain");
+      return {
+        success: false,
+        mintAddress,
+        error: "Jito bundle was accepted but dropped — token was NOT created. Try again with a higher Jito tip.",
+        timestamp,
+      };
+    }
+
     console.log("Launch complete! Mint:", mintAddress);
 
     return {

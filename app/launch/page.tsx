@@ -18,7 +18,7 @@ export default function LaunchPage() {
   const [devBuyAmount, setDevBuyAmount] = useState("0.5");
   const [bundleBuyAmount, setBundleBuyAmount] = useState("0.1");
   const [walletCount, setWalletCount] = useState("6");
-  const [jitoTip, setJitoTip] = useState("0.001");
+  const [jitoTip, setJitoTip] = useState("0.01");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<any>(null);
