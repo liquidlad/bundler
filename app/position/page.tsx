@@ -51,6 +51,7 @@ function PositionContent() {
 
   // Sell state
   const [selling, setSelling] = useState(false);
+  const [sellingWallet, setSellingWallet] = useState<string | null>(null);
   const [sellResult, setSellResult] = useState<SellAllResult | null>(null);
   const [confirmSell, setConfirmSell] = useState(false);
   const [sellStatus, setSellStatus] = useState("");
@@ -129,6 +130,26 @@ function PositionContent() {
     } finally {
       setSelling(false);
       setSellStatus("");
+    }
+  }
+
+  async function handleSellWallet(walletPublicKey: string) {
+    if (!activeMint) return;
+    setSellingWallet(walletPublicKey);
+    try {
+      const res = await fetch("/api/sell-wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mintAddress: activeMint, walletPublicKey, sellPercentage: 100 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sell failed");
+      // Refresh position after sell
+      setTimeout(() => fetchPosition(activeMint), 2000);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSellingWallet(null);
     }
   }
 
@@ -434,13 +455,29 @@ function PositionContent() {
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold">
-                        {w.tokenBalanceFormatted.toLocaleString()} tokens
-                      </p>
-                      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                        ~{walletValue.toFixed(4)} SOL ({pctOfTotal.toFixed(1)}%)
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-bold">
+                          {w.tokenBalanceFormatted.toLocaleString()} tokens
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                          ~{walletValue.toFixed(4)} SOL ({pctOfTotal.toFixed(1)}%)
+                        </p>
+                      </div>
+                      {w.tokenBalanceFormatted > 0 && (
+                        <button
+                          className="px-3 py-1 rounded text-xs font-medium transition-colors"
+                          style={{
+                            background: sellingWallet === w.publicKey ? "var(--border)" : "var(--danger)",
+                            color: "#fff",
+                            opacity: sellingWallet ? 0.5 : 1,
+                          }}
+                          onClick={() => handleSellWallet(w.publicKey)}
+                          disabled={!!sellingWallet}
+                        >
+                          {sellingWallet === w.publicKey ? "Selling..." : "Sell"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
 
     const config = getConfig();
     const connection = new Connection(config.rpcUrl, "confirmed");
-    const buyerWallets = loadWallets().filter(w => w.enabled);
+    // Use ALL wallets for sell (not just enabled — tokens might be in disabled wallets)
+    const buyerWallets = loadWallets();
 
     const result = await consolidateAndSell(
       connection,

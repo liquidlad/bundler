@@ -51,7 +51,13 @@ async function detectTokenProgram(
 
 export async function POST(req: NextRequest) {
   try {
-    const { mintAddress } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+    const { mintAddress } = body;
     if (!mintAddress) {
       return NextResponse.json({ error: "Mint address is required" }, { status: 400 });
     }
@@ -109,7 +115,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Buyer wallets
-    const enabledBuyers = buyerWallets.filter(w => w.enabled);
+    // Check ALL wallets for token balances (not just enabled)
+    const enabledBuyers = buyerWallets;
     for (let i = 0; i < enabledBuyers.length; i++) {
       const buyer = enabledBuyers[i];
       const bal = await getTokenBalance(

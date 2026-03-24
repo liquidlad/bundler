@@ -253,17 +253,17 @@ export async function launchTokenBundled(
     // 5. Build TX 1-4: Buyer wallet buys
     const activeBuyers = buyerWallets; // Use ALL enabled buyer wallets
 
-    // 5. Send create+dev buy directly first (this works reliably)
-    console.log("Sending create + dev buy transaction directly...");
+    // 5. Send create tx (DON'T wait for full confirmation — fire immediately)
+    console.log("Sending create + dev buy transaction...");
     const createSig = await connection.sendRawTransaction(createTx.serialize(), {
       skipPreflight: false,
       maxRetries: 3,
     });
-    await connection.confirmTransaction(createSig, "confirmed");
-    console.log("Token created! Mint:", mintAddress, "Sig:", createSig);
+    console.log("Create tx sent:", createSig, "Mint:", mintAddress);
 
-    // 8. Send ALL buyer buys concurrently (not limited to 4)
     if (activeBuyers.length === 0 || bundleBuyAmountSol <= 0) {
+      // No buyer buys — just wait for create confirmation
+      await connection.confirmTransaction(createSig, "confirmed");
       return {
         success: true,
         mintAddress,
@@ -272,11 +272,32 @@ export async function launchTokenBundled(
       };
     }
 
-    console.log(`Building ${activeBuyers.length} buyer buys using SDK...`);
+    // 6. Wait briefly for create to land, then immediately send buyer buys
+    // Just wait for the tx to be processed (not fully confirmed) — ~400ms
+    console.log("Waiting for create to process...");
+    await new Promise((r) => setTimeout(r, 2000));
 
-    // Fetch bonding curve state ONCE (reuse for all buyers)
+    // Verify token exists
+    const mintAccount = await connection.getAccountInfo(mintKeypair.publicKey);
+    if (!mintAccount) {
+      // Wait a bit more
+      await new Promise((r) => setTimeout(r, 3000));
+      const retry = await connection.getAccountInfo(mintKeypair.publicKey);
+      if (!retry) {
+        return {
+          success: false,
+          error: "Token creation tx sent but not confirmed. Check solscan for tx: " + createSig,
+          timestamp,
+        };
+      }
+    }
+    console.log("Token confirmed on-chain! Building buyer buys...");
+
+    // 7. Build and send ALL buyer buys concurrently using SDK
     const { blockhash: freshBlockhash } = await connection.getLatestBlockhash("confirmed");
     const feeConfig = await onlineSdk.fetchFeeConfig();
+
+    // Fetch bonding curve state ONCE
     const firstBuyer = getKeypair(activeBuyers[0]);
     const { bondingCurveAccountInfo, bondingCurve } =
       await onlineSdk.fetchBuyState(
@@ -294,22 +315,16 @@ export async function launchTokenBundled(
       amount: buySolLamports,
     });
 
-    // Build all buyer txs (fetch associatedUserAccountInfo per buyer but reuse bonding curve)
+    // Build all buyer txs in parallel
     const buyPromises = activeBuyers.map(async (buyer, i) => {
       try {
         const buyerKeypair = getKeypair(buyer);
-        const { associatedUserAccountInfo } =
-          await onlineSdk.fetchBuyState(
-            mintKeypair.publicKey,
-            buyerKeypair.publicKey,
-            TOKEN_2022_PROGRAM_ID
-          );
 
         const buyIxs = await PUMP_SDK.buyInstructions({
           global,
           bondingCurveAccountInfo,
           bondingCurve,
-          associatedUserAccountInfo,
+          associatedUserAccountInfo: null, // Will create ATA
           mint: mintKeypair.publicKey,
           user: buyerKeypair.publicKey,
           solAmount: buySolLamports,
@@ -326,43 +341,32 @@ export async function launchTokenBundled(
 
         return { tx: buyTx, label: `buyer-${i + 1}` };
       } catch (e: any) {
-        console.error(`Failed to build buy tx for buyer-${i + 1}:`, e.message);
+        console.error(`Failed to build buy for buyer-${i + 1}:`, e.message);
         return null;
       }
     });
 
     const builtTxs = (await Promise.all(buyPromises)).filter(Boolean) as { tx: Transaction; label: string }[];
 
-    if (builtTxs.length === 0) {
-      return {
-        success: true,
-        mintAddress,
-        txSignature: createSig,
-        error: "Token created but buyer buy instructions failed to build. Buy manually on pump.fun.",
-        timestamp,
-      };
-    }
-
-    // Send ALL buyer buys concurrently (fire and forget — don't wait sequentially)
-    console.log(`Sending ${builtTxs.length} buyer buys concurrently...`);
+    // Send ALL at once — concurrent, not sequential
+    console.log(`Firing ${builtTxs.length} buyer buys concurrently...`);
     const sendPromises = builtTxs.map(async ({ tx, label }) => {
       try {
         const sig = await connection.sendRawTransaction(tx.serialize(), {
           skipPreflight: true,
           maxRetries: 5,
         });
-        console.log(`${label} buy sent: ${sig}`);
-        return { label, sig, success: true };
+        console.log(`${label} sent: ${sig}`);
+        return { label, success: true };
       } catch (e: any) {
-        console.error(`${label} buy failed: ${e.message}`);
-        return { label, error: e.message, success: false };
+        console.error(`${label} failed: ${e.message}`);
+        return { label, success: false };
       }
     });
 
     const buyResults = await Promise.all(sendPromises);
     const succeeded = buyResults.filter(r => r.success).length;
-    const failed = buyResults.filter(r => !r.success).length;
-    console.log(`Buyer buys: ${succeeded} sent, ${failed} failed`);
+    console.log(`Buyer buys: ${succeeded}/${builtTxs.length} sent`);
 
     console.log("Launch complete! Mint:", mintAddress);
 
