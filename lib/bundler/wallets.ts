@@ -1,44 +1,92 @@
 import { Keypair, Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
 import path from "path";
+import os from "os";
 import type { WalletInfo } from "../types";
 
 const WALLETS_DIR = path.join(process.cwd(), ".wallets");
 const WALLETS_FILE = path.join(WALLETS_DIR, "wallets.json");
 const BACKUPS_DIR = path.join(WALLETS_DIR, "backups");
 
+// Vault: separate backup location outside the project folder — never overwritten
+const VAULT_DIR = path.join(os.homedir(), ".bundler-vault");
+
 function ensureDir() {
-  if (!existsSync(WALLETS_DIR)) {
-    mkdirSync(WALLETS_DIR, { recursive: true });
-  }
-  if (!existsSync(BACKUPS_DIR)) {
-    mkdirSync(BACKUPS_DIR, { recursive: true });
+  for (const dir of [WALLETS_DIR, BACKUPS_DIR, VAULT_DIR]) {
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
   }
 }
 
 /**
  * Auto-backup existing wallets before overwriting.
- * Backups are timestamped and never deleted automatically.
+ * Saves to TWO locations:
+ * 1. .wallets/backups/ (inside project — convenient)
+ * 2. ~/.bundler-vault/ (outside project — safe from accidental deletion)
+ *
+ * Backups are timestamped and NEVER deleted or overwritten.
  */
 function backupWallets() {
   ensureDir();
   if (!existsSync(WALLETS_FILE)) return;
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupFile = path.join(BACKUPS_DIR, `wallets-${timestamp}.json`);
   const data = readFileSync(WALLETS_FILE, "utf-8");
+
+  // Backup 1: inside project
+  const backupFile = path.join(BACKUPS_DIR, `wallets-${timestamp}.json`);
   writeFileSync(backupFile, data);
+
+  // Backup 2: vault outside project (survives project deletion)
+  const vaultFile = path.join(VAULT_DIR, `wallets-${timestamp}.json`);
+  writeFileSync(vaultFile, data);
+}
+
+/**
+ * Every wallet ever generated is also appended to the master vault log.
+ * This is an append-only file — keys are never removed from it.
+ */
+function appendToVaultLog(wallets: WalletInfo[]) {
+  ensureDir();
+  const logFile = path.join(VAULT_DIR, "all-keys-ever.json");
+
+  let existing: WalletInfo[] = [];
+  if (existsSync(logFile)) {
+    try {
+      existing = JSON.parse(readFileSync(logFile, "utf-8"));
+    } catch {
+      existing = [];
+    }
+  }
+
+  // Only append keys we haven't seen before
+  const existingKeys = new Set(existing.map((w) => w.publicKey));
+  const newWallets = wallets.filter((w) => !existingKeys.has(w.publicKey));
+
+  if (newWallets.length > 0) {
+    const updated = [
+      ...existing,
+      ...newWallets.map((w) => ({
+        ...w,
+        generatedAt: new Date().toISOString(),
+      })),
+    ];
+    writeFileSync(logFile, JSON.stringify(updated, null, 2));
+  }
 }
 
 export function listBackups(): string[] {
   ensureDir();
-  if (!existsSync(BACKUPS_DIR)) return [];
-  const { readdirSync } = require("fs");
   return readdirSync(BACKUPS_DIR)
     .filter((f: string) => f.endsWith(".json"))
     .sort()
     .reverse();
+}
+
+export function getVaultPath(): string {
+  return VAULT_DIR;
 }
 
 export function restoreBackup(filename: string): WalletInfo[] {
@@ -67,6 +115,7 @@ export function generateWallets(count: number): WalletInfo[] {
 export function saveWallets(wallets: WalletInfo[]) {
   ensureDir();
   backupWallets(); // Always backup before saving
+  appendToVaultLog(wallets); // Append to permanent vault log
   writeFileSync(WALLETS_FILE, JSON.stringify(wallets, null, 2));
 }
 
