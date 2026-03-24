@@ -233,15 +233,25 @@ export async function launchTokenBundled(
     });
 
     const { blockhash } = await connection.getLatestBlockhash("confirmed");
+    const tipLamports = Math.floor(jitoTipSol * LAMPORTS_PER_SOL);
 
+    // 4. Build create tx with Jito tip (tip always on create tx for now)
+    const jitoTipAccount = randomJitoTipAccount();
     const createTx = new Transaction();
     createTx.add(...createAndBuyIxs);
+    createTx.add(
+      SystemProgram.transfer({
+        fromPubkey: signerKeypair.publicKey,
+        toPubkey: jitoTipAccount,
+        lamports: tipLamports,
+      })
+    );
     createTx.feePayer = signerKeypair.publicKey;
     createTx.recentBlockhash = blockhash;
     createTx.sign(signerKeypair, mintKeypair);
 
-    // 4. Build TX 1-4: Buyer wallet buys
-    const activeBuyers = buyerWallets.slice(0, 4); // Max 5 txs per Jito bundle
+    // 5. Build TX 1-4: Buyer wallet buys
+    const activeBuyers = buyerWallets.slice(0, 4);
     const buyerTxs: Transaction[] = [];
 
     if (activeBuyers.length > 0 && bundleBuyAmountSol > 0) {
@@ -259,28 +269,22 @@ export async function launchTokenBundled(
       );
       const postDevSolReserves = INITIAL_VIRTUAL_SOL_RESERVES.add(devSolLamports);
 
-      // Running curve state for each subsequent buyer
       let currentTokenReserves = postDevTokenReserves;
       let currentSolReserves = postDevSolReserves;
 
       for (let i = 0; i < activeBuyers.length; i++) {
         const buyerKeypair = getKeypair(activeBuyers[i]);
 
-        // Calculate expected tokens for this buyer
         const expectedTokens = calculateTokensFromSol(
           currentTokenReserves,
           currentSolReserves,
           buySolLamports
         );
-
-        // Use 1% of expected as minimum (very generous slippage for bundle safety)
         const minTokens = expectedTokens.div(new BN(100));
 
-        // Update running reserves for next buyer's calculation
         currentTokenReserves = currentTokenReserves.sub(expectedTokens);
         currentSolReserves = currentSolReserves.add(buySolLamports);
 
-        // Build buy instructions
         const buyIxs = buildBuyInstructionForBundle(
           mintKeypair.publicKey,
           buyerKeypair.publicKey,
@@ -290,19 +294,6 @@ export async function launchTokenBundled(
 
         const buyTx = new Transaction();
         buyTx.add(...buyIxs);
-
-        // Add Jito tip to the LAST transaction in the bundle
-        if (i === activeBuyers.length - 1) {
-          const tipLamports = Math.floor(jitoTipSol * LAMPORTS_PER_SOL);
-          buyTx.add(
-            SystemProgram.transfer({
-              fromPubkey: buyerKeypair.publicKey,
-              toPubkey: randomJitoTipAccount(),
-              lamports: tipLamports,
-            })
-          );
-        }
-
         buyTx.feePayer = buyerKeypair.publicKey;
         buyTx.recentBlockhash = blockhash;
         buyTx.sign(buyerKeypair);
@@ -311,7 +302,17 @@ export async function launchTokenBundled(
       }
     }
 
-    // 5. Submit everything as ONE Jito bundle
+    // 6. Simulate create tx first to catch errors early
+    console.log("Simulating create transaction...");
+    try {
+      await connection.simulateTransaction(createTx);
+      console.log("Simulation passed");
+    } catch (simErr: any) {
+      console.error("Simulation failed:", simErr.message);
+      // Don't block — Jito might still work, simulation can fail for new accounts
+    }
+
+    // 7. Submit everything as ONE Jito bundle
     console.log(`Submitting Jito bundle: 1 create + ${buyerTxs.length} buys...`);
 
     const allTxsBase58 = [
@@ -397,8 +398,8 @@ export async function launchTokenBundled(
     console.log("Jito accepted. Waiting for on-chain confirmation...");
 
     let confirmed = false;
-    for (let attempt = 0; attempt < 30; attempt++) {
-      await new Promise((r) => setTimeout(r, 2000)); // 2s between checks
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await new Promise((r) => setTimeout(r, 500)); // 500ms between checks
       const mintAccount = await connection.getAccountInfo(
         mintKeypair.publicKey
       );
@@ -407,7 +408,6 @@ export async function launchTokenBundled(
         console.log("Token confirmed on-chain! Mint:", mintAddress);
         break;
       }
-      console.log(`Waiting... attempt ${attempt + 1}/30`);
     }
 
     if (!confirmed) {
