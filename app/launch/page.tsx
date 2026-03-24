@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ExtractionResult, TokenMetadata } from "@/lib/types";
 
 type LaunchStep = "input" | "preview" | "configure" | "launching" | "result";
@@ -22,6 +23,7 @@ export default function LaunchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<any>(null);
+  const router = useRouter();
 
   // Step 1: Extract metadata from tweet
   async function handleExtract() {
@@ -75,6 +77,13 @@ export default function LaunchPage() {
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || "Launch failed");
+
+      if (data.success && data.mintAddress) {
+        // Auto-redirect to position tracker
+        const cost = parseFloat(devBuyAmount) + parseFloat(bundleBuyAmount) * parseInt(walletCount) + parseFloat(jitoTip);
+        router.push(`/position?mint=${data.mintAddress}&cost=${cost.toFixed(4)}`);
+        return;
+      }
 
       setResult(data);
       setStep("result");
@@ -468,18 +477,29 @@ export default function LaunchPage() {
                   {result.txSignature}
                 </p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
+                <button
+                  className="py-3 px-6 rounded-lg font-bold text-lg"
+                  style={{ background: "var(--accent)", color: "#000" }}
+                  onClick={() => {
+                    const cost = parseFloat(devBuyAmount) + parseFloat(bundleBuyAmount) * parseInt(walletCount) + parseFloat(jitoTip);
+                    router.push(`/position?mint=${result.mintAddress}&cost=${cost.toFixed(4)}`);
+                  }}
+                >
+                  Track Position &amp; Sell
+                </button>
                 <a
                   href={`https://pump.fun/${result.mintAddress}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-primary"
+                  className="px-4 py-2 rounded-lg flex items-center"
+                  style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}
                 >
                   View on Pump.fun
                 </a>
                 <button
                   className="px-4 py-2 rounded-lg"
-                  style={{ background: "var(--bg-secondary)", color: "var(--text-primary)" }}
+                  style={{ background: "var(--bg-secondary)", color: "var(--text-secondary)" }}
                   onClick={() => {
                     setStep("input");
                     setTweetUrl("");
