@@ -43,6 +43,9 @@ Phase 5 Flow (future auto-monitor):
 - **No forked bundler code** — all existing open-source bundlers have security issues (malware deps, key exfiltration patterns). We build from scratch using only trusted packages.
 - **Pure TypeScript** — No Python dependency. Tweet scraping via HTTP fetch of tweet URL.
 - **Modular pipeline** — Each stage (input → extract → launch → buy → sell) is independent and testable.
+- **Stealth mode** — Wallet funding uses randomized amounts (±12%), staggered timing (3-12s delays), shuffled order to avoid tracker detection (Bubblemap, Arkham).
+- **Wallet vault** — All keys backed up to ~/.bundler-vault/ (outside project). Append-only all-keys-ever.json log. Keys are never lost.
+- **Helius RPC** — Using Helius free tier for reliable Solana RPC.
 
 ## Build Phases
 1. **Phase 1 — Core Bundler:** PumpPortal API integration, wallet gen, create + bundled buy working
