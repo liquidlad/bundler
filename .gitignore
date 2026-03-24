@@ -1,8 +1,11 @@
 node_modules/
 dist/
+.next/
 .env
+.env.local
 *.key
 *.pem
+.wallets/
 wallets/
 .DS_Store
 *.log

@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-card: #1a1a2e;
+  --border: #2a2a3e;
+  --text-primary: #e4e4ef;
+  --text-secondary: #8888a0;
+  --accent: #00d4aa;
+  --accent-hover: #00f0c0;
+  --danger: #ff4466;
+  --warning: #ffaa00;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.card {
+  @apply rounded-xl border p-6;
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+
+.btn-primary {
+  @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200;
+  background: var(--accent);
+  color: #000;
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-danger {
+  @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200;
+  background: var(--danger);
+  color: #fff;
+}
+
+.input-field {
+  @apply w-full px-4 py-3 rounded-lg border outline-none transition-colors;
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.input-field:focus {
+  border-color: var(--accent);
+}
+.input-field::placeholder {
+  color: var(--text-secondary);
+}
+
+.label {
+  @apply block text-sm font-medium mb-2;
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  @apply inline-block w-2 h-2 rounded-full mr-2;
+}
+.status-dot.active { background: var(--accent); }
+.status-dot.warning { background: var(--warning); }
+.status-dot.error { background: var(--danger); }

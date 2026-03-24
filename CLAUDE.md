@@ -11,29 +11,46 @@ A self-hosted Pump.fun bundle bot with tweet-triggered auto-launch capability. B
 5. **PumpSwap Migration** — Full lifecycle: launch → bundle → migrate to PumpSwap → sell
 
 ## Tech Stack
-- **Language:** TypeScript (Node.js)
-- **Bundling:** Jito bundles for atomic same-block execution
-- **Token Creation:** PumpPortal API (pumpportal.fun) — create + buy in single atomic bundle
-- **PumpFun SDK:** New 18-instruction IDL with TOKEN_2022 (Token Extensions) support
-- **Twitter Monitor:** twikit (Python) or custom scraper — poll specific accounts every 5-10s
+- **Language:** TypeScript (Node.js) — pure TS, no Python
+- **Token Creation:** PumpPortal API (pumpportal.fun) — create + buy in single atomic Jito bundle
+- **Tweet Input:** Manual tweet URL paste → HTTP scrape → AI extract (Phase 1). Auto-monitor later (Phase 5).
 - **AI Extraction:** Claude API (structured JSON output) — extract name/ticker/description/image from tweets
 - **Image Pipeline:** Download tweet image → upload to IPFS via pump.fun/api/ipfs
+- **Wallets:** Up to 30 generated keypairs, 6-8 used per first buy
+- **UI:** CLI (commander.js). Web dashboard is future Phase 6.
 - **Notifications:** Discord/Telegram webhook for launch confirmations
 
 ## Architecture
 ```
-[Twitter Monitor] → [AI Metadata Extractor] → [Token Launcher] → [Bundled Buy] → [Sell Strategy]
-      |                       |                       |                  |               |
-   twikit/scraper      Claude/GPT-4o           PumpPortal API      Jito Bundle     Time/MC triggers
-   (poll 5-10s)        structured JSON         create + buy        20+ wallets     auto or manual
-                       name/ticker/img
+Phase 1-2 Flow (manual tweet input):
+[Paste Tweet URL] → [Scrape Tweet] → [AI Extract Metadata] → [User Approval] → [PumpPortal Launch + Buy] → [Manual Sell]
+                                            |
+                                      Claude Haiku
+                                      name/ticker/img
+                                      confidence score
+
+Phase 5 Flow (future auto-monitor):
+[Twitter Poller] → [AI Extract] → [User Approval] → [Launch + Buy] → [Auto Sell on Profit Target]
 ```
 
-## Key Design Decisions
+## Confirmed Decisions (2026-03-23)
+- **PumpPortal API** — Use PumpPortal (0.5% fee) over raw SDK. Saves weeks of dev time. Can swap to raw SDK later if volume justifies it.
+- **30 wallets total** — Up to 30 buyer wallets generated. First buy uses 6-8 wallets.
+- **Tweet input: manual link paste first** — User pastes tweet URL → scrape → AI extract → approve → launch. Free, instant, zero maintenance. Automated monitoring added later.
+- **Approval required** — No fully autonomous launches yet. User confirms before every launch.
+- **Manual sell only (for now)** — Future: auto-dump based on profit target.
+- **Web dashboard (Next.js)** — User is not very technical, web UI is easier to use than CLI.
 - **No forked bundler code** — all existing open-source bundlers have security issues (malware deps, key exfiltration patterns). We build from scratch using only trusted packages.
-- **PumpPortal API over raw SDK** — PumpPortal handles IPFS upload, token creation, and Jito bundling in a clean API. Avoids needing to maintain our own IDL integration.
-- **Hybrid Python/TS** — Twitter scraping ecosystem is strongest in Python (twikit). Core bundler logic in TypeScript for Solana ecosystem compatibility.
-- **Modular pipeline** — Each stage (monitor → extract → launch → buy → sell) is independent and testable.
+- **Pure TypeScript** — No Python dependency. Tweet scraping via HTTP fetch of tweet URL.
+- **Modular pipeline** — Each stage (input → extract → launch → buy → sell) is independent and testable.
+
+## Build Phases
+1. **Phase 1 — Core Bundler:** PumpPortal API integration, wallet gen, create + bundled buy working
+2. **Phase 2 — Tweet-to-Launch:** Paste tweet URL → scrape → AI extract → approve → launch
+3. **Phase 3 — Wallet Management:** Fund/gather/balance scripts, encrypted keypair storage
+4. **Phase 4 — Sell + Anti-Detection:** Manual sell, then auto-dump. Holder distribution, staggered buys.
+5. **Phase 5 (future) — Auto-Monitor:** Automated Twitter polling for watched accounts
+6. **Phase 6 (future) — Web Dashboard:** React UI for visual management
 
 ## Research Notes
 
@@ -87,34 +104,32 @@ A self-hosted Pump.fun bundle bot with tweet-triggered auto-launch capability. B
 ## File Structure
 ```
 bundler/
-├── CLAUDE.md              # This file — project notes and context
-├── README.md              # Public-facing documentation
-├── package.json           # Node.js dependencies
-├── tsconfig.json          # TypeScript configuration
-├── .env.example           # Environment variable template
-├── .gitignore             # Git ignore rules
-├── src/
-│   ├── index.ts           # Main entry point / CLI
-│   ├── config.ts          # Configuration loader
+├── CLAUDE.md                      # Project notes and context
+├── package.json                   # Dependencies (Next.js, Solana, Claude SDK)
+├── next.config.js                 # Next.js configuration
+├── tailwind.config.js             # Tailwind CSS config
+├── tsconfig.json                  # TypeScript config
+├── .env.example                   # Environment variable template
+├── .gitignore                     # Git ignore rules
+├── app/                           # Next.js App Router (web UI)
+│   ├── layout.tsx                 # Root layout with navbar
+│   ├── page.tsx                   # Dashboard — stats, wallet overview, recent launches
+│   ├── launch/page.tsx            # Launch flow — paste tweet → AI extract → approve → launch
+│   ├── wallets/page.tsx           # Wallet management — generate, view balances
+│   ├── globals.css                # Global styles (dark theme)
+│   └── api/
+│       ├── launch/route.ts        # POST — create token + bundled buy via PumpPortal
+│       ├── wallets/route.ts       # GET/POST — load/generate wallets
+│       ├── balances/route.ts      # GET — refresh all wallet balances
+│       └── extract/route.ts       # POST — scrape tweet + AI metadata extraction
+├── lib/                           # Core backend logic
+│   ├── config.ts                  # Env var loader
+│   ├── types/index.ts             # Shared TypeScript types
 │   ├── bundler/
-│   │   ├── launcher.ts    # Token creation via PumpPortal API
-│   │   ├── buyer.ts       # Multi-wallet Jito bundle buy
-│   │   ├── seller.ts      # Sell strategies (timed, MC-based, manual)
-│   │   ├── wallets.ts     # Wallet generation and management
-│   │   └── jito.ts        # Jito bundle construction and submission
-│   ├── monitor/
-│   │   ├── twitter.ts     # Twitter/X account monitoring
-│   │   ├── extractor.ts   # AI metadata extraction from tweets
-│   │   └── pipeline.ts    # Monitor → Extract → Launch pipeline
-│   ├── utils/
-│   │   ├── ipfs.ts        # Image upload to IPFS via pump.fun API
-│   │   ├── notify.ts      # Discord/Telegram notifications
-│   │   └── logger.ts      # Logging utility
-│   └── types/
-│       └── index.ts       # Shared TypeScript types
-└── scripts/
-    ├── generate-wallets.ts    # Generate buyer wallets
-    ├── fund-wallets.ts        # Fund wallets from main wallet
-    ├── gather-funds.ts        # Gather SOL back to main wallet
-    └── check-balances.ts      # Check all wallet balances
+│   │   ├── launcher.ts            # PumpPortal API — create + bundled buy
+│   │   └── wallets.ts             # Wallet generation, storage, balance checking
+│   └── monitor/
+│       └── extractor.ts           # Tweet scraping + Claude AI metadata extraction
+└── components/
+    └── Navbar.tsx                 # Navigation bar component
 ```
