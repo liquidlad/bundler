@@ -12,7 +12,7 @@ A self-hosted Pump.fun bundle bot with tweet-triggered auto-launch capability. B
 
 ## Tech Stack
 - **Language:** TypeScript (Node.js) — pure TS, no Python
-- **Token Creation:** PumpPortal API (pumpportal.fun) — create + buy in single atomic Jito bundle
+- **Token Creation:** Official @pump-fun/pump-sdk (v1.31.0) — createV2 + buy instructions, Token2022 support
 - **Tweet Input:** Manual tweet URL paste → HTTP scrape → AI extract (Phase 1). Auto-monitor later (Phase 5).
 - **AI Extraction:** Claude API (structured JSON output) — extract name/ticker/description/image from tweets
 - **Image Pipeline:** Download tweet image → upload to IPFS via pump.fun/api/ipfs
@@ -47,13 +47,26 @@ Phase 5 Flow (future auto-monitor):
 - **Wallet vault** — All keys backed up to ~/.bundler-vault/ (outside project). Append-only all-keys-ever.json log. Keys are never lost.
 - **Helius RPC** — Using Helius free tier for reliable Solana RPC.
 
+## Current Status (2026-03-23)
+- **Phase 1 DONE:** Token creation + dev buy works via official @pump-fun/pump-sdk (v1.31.0)
+- **Phase 2 DONE:** Tweet paste → fxtwitter scrape → Claude AI extract → preview/edit → launch
+- **Phase 3 DONE:** Wallet gen, fund (stealth mode), gather, balance check, enable/disable toggles, vault backup
+- **Phase 4 PARTIAL:** Sell page built (uses SDK), manual sell by mint address
+- **Jito bundles:** Accepted but dropping — likely issue with manually constructed buyer buy instructions (wrong discriminator or accounts for V2/Token2022). Create+dev buy alone works fine.
+
+## Known Issues / Next Steps
+1. **Jito bundles dropping** — Create+dev buy works but buyer buy instructions built manually may have wrong account layout for the V2 program. Need to debug by testing a single buy instruction in isolation. Consider using SDK's `buyInstructions()` after creating token (two-step: create first, then bundle buys).
+2. **Auto-dump on profit** — Not built yet. Future Phase 4.
+3. **Auto Twitter monitoring** — Not built yet. Future Phase 5.
+4. **Image upload** — Works from tweet extraction (fxtwitter). Manual image upload from file not yet supported.
+
 ## Build Phases
-1. **Phase 1 — Core Bundler:** PumpPortal API integration, wallet gen, create + bundled buy working
-2. **Phase 2 — Tweet-to-Launch:** Paste tweet URL → scrape → AI extract → approve → launch
-3. **Phase 3 — Wallet Management:** Fund/gather/balance scripts, encrypted keypair storage
-4. **Phase 4 — Sell + Anti-Detection:** Manual sell, then auto-dump. Holder distribution, staggered buys.
+1. ~~**Phase 1 — Core Bundler:**~~ DONE — official pump-fun SDK, wallet gen, create + dev buy
+2. ~~**Phase 2 — Tweet-to-Launch:**~~ DONE — fxtwitter + Claude AI extraction
+3. ~~**Phase 3 — Wallet Management:**~~ DONE — fund/gather/balances/toggles/stealth/vault
+4. **Phase 4 — Sell + Anti-Detection:** Sell page done. Auto-dump + holder distribution TODO.
 5. **Phase 5 (future) — Auto-Monitor:** Automated Twitter polling for watched accounts
-6. **Phase 6 (future) — Web Dashboard:** React UI for visual management
+6. **Phase 6 (future) — Additional features:** TBD
 
 ## Research Notes
 
