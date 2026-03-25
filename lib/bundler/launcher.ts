@@ -156,7 +156,7 @@ function buildV2BuyInstruction(
  * Bundle structure:
  * TX 0: Create token + dev buy (SDK createV2AndBuyInstructions)
  * TX 1-N: Buyer wallet buys (manually constructed V2 buy instructions)
- * Jito tip on last TX
+ * Jito tip on create TX (main wallet pays)
  */
 export async function launchTokenBundled(
   metadata: TokenMetadata,
@@ -202,12 +202,10 @@ export async function launchTokenBundled(
     const createTx = new Transaction();
     createTx.add(...createAndBuyIxs);
 
-    // Add Jito tip to create tx if no buyer txs
-    if (activeBuyers.length === 0 || bundleBuyAmountSol <= 0) {
-      createTx.add(SystemProgram.transfer({
-        fromPubkey: signerKeypair.publicKey, toPubkey: randomJitoTipAccount(), lamports: tipLamports,
-      }));
-    }
+    // Jito tip always on create TX (main wallet pays)
+    createTx.add(SystemProgram.transfer({
+      fromPubkey: signerKeypair.publicKey, toPubkey: randomJitoTipAccount(), lamports: tipLamports,
+    }));
 
     createTx.feePayer = signerKeypair.publicKey;
     createTx.recentBlockhash = blockhash;
@@ -246,14 +244,6 @@ export async function launchTokenBundled(
 
         const buyTx = new Transaction();
         buyTx.add(...buyIxs);
-
-        // Add Jito tip to LAST buyer tx
-        if (i === activeBuyers.length - 1) {
-          buyTx.add(SystemProgram.transfer({
-            fromPubkey: buyerKeypair.publicKey, toPubkey: randomJitoTipAccount(), lamports: tipLamports,
-          }));
-        }
-
         buyTx.feePayer = buyerKeypair.publicKey;
         buyTx.recentBlockhash = blockhash;
         buyTx.sign(buyerKeypair);
