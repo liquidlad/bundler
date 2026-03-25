@@ -115,10 +115,12 @@ function buildV2BuyInstruction(
   );
 
   // 2. Buy instruction with all 17 accounts
+  // Data: discriminator + tokenAmount (how many tokens to buy) + maxSolCost (slippage cap)
+  const maxSolCost = solAmountLamports.mul(new BN(2)); // 2x slippage cap
   const data = Buffer.alloc(8 + 8 + 8);
   BUY_DISCRIMINATOR.copy(data, 0);
-  minTokens.toArrayLike(Buffer, "le", 8).copy(data, 8);
-  solAmountLamports.toArrayLike(Buffer, "le", 8).copy(data, 16);
+  minTokens.toArrayLike(Buffer, "le", 8).copy(data, 8);   // token amount to buy
+  maxSolCost.toArrayLike(Buffer, "le", 8).copy(data, 16);  // max SOL willing to pay
 
   const buyIx = new TransactionInstruction({
     programId: PUMP_PROGRAM_ID,
@@ -234,7 +236,6 @@ export async function launchTokenBundled(
 
         // Calculate expected tokens for this buyer
         const expectedTokens = calculateTokensFromSol(curTokenRes, curSolRes, buySolLamports);
-        const minTokens = expectedTokens.div(new BN(100)); // 1% minimum (99% slippage for bundle safety)
 
         curTokenRes = curTokenRes.sub(expectedTokens);
         curSolRes = curSolRes.add(buySolLamports);
@@ -244,7 +245,7 @@ export async function launchTokenBundled(
           buyerKeypair.publicKey,
           signerKeypair.publicKey, // creator = main wallet
           buySolLamports,
-          minTokens
+          expectedTokens // full expected token amount
         );
 
         const buyTx = new Transaction();
