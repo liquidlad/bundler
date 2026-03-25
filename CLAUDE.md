@@ -47,20 +47,21 @@ Phase 5 Flow (future auto-monitor):
 - **Wallet vault** — All keys backed up to ~/.bundler-vault/ (outside project). Append-only all-keys-ever.json log. Keys are never lost.
 - **Helius RPC** — Using Helius free tier for reliable Solana RPC.
 
-## Current Status (2026-03-24)
-- **Phase 1 DONE:** Token creation + dev buy via official @pump-fun/pump-sdk (v1.31.0)
-- **Phase 2 DONE:** Tweet paste → fxtwitter scrape → Claude AI extract → preview/edit → launch
+## Current Status (2026-03-25)
+- **Phase 1 DONE:** Token creation + dev buy + same-block buyer buys via Jito bundle
+- **Phase 2 DONE:** Tweet paste → fxtwitter scrape → Claude AI extract → image picker → preview/edit → launch
 - **Phase 3 DONE:** Wallet gen, fund (stealth mode), gather, balance check, enable/disable toggles, vault backup
 - **Phase 4 MOSTLY DONE:** Sell page, per-wallet sell buttons, consolidate-and-sell, position tracker with real P&L
-- **Buyer buys:** Create+dev buy sends first, then all buyer buys fire concurrently ~2-3s later using SDK. Not same block but close.
+- **Same-block Jito bundle WORKING:** Correct V2 buy instruction with all 17 accounts. Max 4 buyer wallets in bundle (Jito 5-tx limit). Extra wallets sent after.
+- **IPFS pre-upload:** Uploads during configure step, launch skips upload (~4s faster)
 - **Collaborated via:** github.com/better-builders added as collaborator for cross-machine work
 
 ## Known Issues / Next Steps
-1. **Not same-block** — Buyer buys land 1-2 blocks after create. True same-block needs Jito bundles with correct V2 buy instructions, which we haven't solved yet.
-2. **Auto-dump on profit** — Not built yet. Future Phase 4.
-3. **Auto Twitter monitoring** — Not built yet. Future Phase 5.
-4. **Image upload** — Works from tweet extraction (fxtwitter). Manual image upload from file not yet supported.
-5. **OneDrive .next cache** — `.next` build dir gets corrupted by OneDrive sync. Need to `rm -rf .next` before each dev server start.
+1. **Auto-dump on profit** — Not built yet. Future.
+2. **Auto Twitter monitoring** — Not built yet. Future.
+3. **Manual image upload** — Only tweet images supported. File upload TODO.
+4. **OneDrive .next cache** — `.next` build dir gets corrupted by OneDrive sync. Need to `rm -rf .next` before each dev server start.
+5. **Helius rate limits** — Position page polling at 3s can trigger 429s. May need paid RPC tier for heavy use.
 
 ## Build Phases
 1. ~~**Phase 1 — Core Bundler:**~~ DONE — official pump-fun SDK, wallet gen, create + dev buy + buyer buys
