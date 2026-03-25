@@ -86,7 +86,7 @@ function PositionContent() {
     if (autoRefresh) {
       intervalRef.current = setInterval(() => {
         fetchPosition(activeMint);
-      }, 1000);
+      }, 3000);
     }
 
     return () => {

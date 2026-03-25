@@ -178,12 +178,16 @@ export async function launchTokenBundled(
     const jitoBuyers = buyerWallets.slice(0, 4);
     const extraBuyers = buyerWallets.slice(4);
 
-    // 1. Upload metadata to IPFS
-    console.log("Uploading metadata to IPFS...");
-    const metadataUri = await uploadToIpfs(metadata.imageUrl, metadata);
+    // 1. Upload metadata to IPFS + fetch global state in PARALLEL
+    console.log("Uploading to IPFS + fetching global state...");
+    const startTime = Date.now();
+    const [metadataUri, global] = await Promise.all([
+      uploadToIpfs(metadata.imageUrl, metadata),
+      onlineSdk.fetchGlobal(),
+    ]);
+    console.log(`IPFS + global: ${Date.now() - startTime}ms`);
 
-    // 2. Fetch global state
-    const global = await onlineSdk.fetchGlobal();
+    // 2. Build transactions
     const devSolLamports = new BN(Math.floor(devBuyAmountSol * 1e9));
     const devTokenAmount = getBuyTokenAmountFromSolAmount({
       global, feeConfig: null, mintSupply: null, bondingCurve: null, amount: devSolLamports,

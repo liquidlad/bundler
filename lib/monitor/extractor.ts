@@ -35,18 +35,47 @@ export async function scrapeTweet(tweetUrl: string): Promise<{
       const tweet = data.tweet;
 
       const mediaUrls: string[] = [];
-      if (tweet.media?.photos) {
-        for (const photo of tweet.media.photos) {
-          if (photo.url) mediaUrls.push(photo.url);
-        }
-      }
-      // Also check for media in all format
-      if (tweet.media?.all) {
-        for (const item of tweet.media.all) {
-          if (item.type === "photo" && item.url && !mediaUrls.includes(item.url)) {
-            mediaUrls.push(item.url);
+
+      // Helper to extract photos from a tweet object
+      function extractPhotos(t: any) {
+        if (t?.media?.photos) {
+          for (const photo of t.media.photos) {
+            if (photo.url && !mediaUrls.includes(photo.url)) mediaUrls.push(photo.url);
           }
         }
+        if (t?.media?.all) {
+          for (const item of t.media.all) {
+            if (item.type === "photo" && item.url && !mediaUrls.includes(item.url)) {
+              mediaUrls.push(item.url);
+            }
+          }
+        }
+      }
+
+      // 1. Check the tweet itself for images
+      extractPhotos(tweet);
+
+      // 2. If no images, check quoted tweet
+      if (mediaUrls.length === 0 && tweet.quote) {
+        extractPhotos(tweet.quote);
+      }
+
+      // 3. If still no images, check the tweet it's replying to
+      if (mediaUrls.length === 0 && tweet.replying_to_status) {
+        try {
+          const parentRes = await fetch(
+            `https://api.fxtwitter.com/status/${tweet.replying_to_status}`,
+            { headers: { "User-Agent": "BundlerBot/1.0" } }
+          );
+          if (parentRes.ok) {
+            const parentData = await parentRes.json();
+            extractPhotos(parentData.tweet);
+            // If parent also has no images, check parent's quote tweet
+            if (mediaUrls.length === 0 && parentData.tweet?.quote) {
+              extractPhotos(parentData.tweet.quote);
+            }
+          }
+        } catch {}
       }
 
       return {
@@ -97,7 +126,7 @@ export async function extractMetadataFromTweet(
 {
   "name": "string - the token's display name",
   "symbol": "string - the ticker symbol (usually $SOMETHING, return without the $)",
-  "description": "string - a fun, memey description for the token based on the tweet (1-2 sentences)",
+  "description": "string - use the exact words from the tweet as the description. Keep it as close to the original tweet text as possible. Clean up hashtags/mentions but preserve the message.",
   "shouldLaunch": true/false - whether this tweet has enough info for a token launch,
   "confidence": 0.0-1.0 - how confident you are this would make a good token
 }
@@ -106,7 +135,7 @@ Rules:
 - Look for $TICKER patterns in the text as high-confidence signals
 - If no explicit ticker, create one from the main subject (max 10 chars, all caps)
 - The name should be catchy and meme-worthy
-- Description should capture the vibe of the tweet
+- Description should be the actual tweet text (cleaned up slightly). Do NOT make up new text — use the tweet's own words
 - Set shouldLaunch=false if the tweet is just normal conversation with no meme potential
 - Be generous with confidence if there's clear meme/viral potential`;
 
