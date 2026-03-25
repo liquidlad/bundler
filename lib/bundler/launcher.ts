@@ -39,11 +39,9 @@ const JITO_TIP_ACCOUNTS = [
   "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
   "HFqU5x63VTqvQss8hp11i4bPCLz2yGMCMGHUPcLAUJn8",
   "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
-  "ADaUMid9yfUC47KSWHSl42dFOREEhF6hNKax2qgY2tUB",
   "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
   "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
   "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
-  "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
 ];
 
 function randomJitoTipAccount(): PublicKey {
@@ -175,7 +173,10 @@ export async function launchTokenBundled(
     const signerKeypair = getKeypair(mainWallet);
     const mintKeypair = Keypair.generate();
     const mintAddress = mintKeypair.publicKey.toBase58();
-    const activeBuyers = buyerWallets;
+    // Jito max 5 txs per bundle: 1 create + up to 4 buyer buys
+    // Remaining buyers will be sent directly after if Jito succeeds
+    const jitoBuyers = buyerWallets.slice(0, 4);
+    const extraBuyers = buyerWallets.slice(4);
 
     // 1. Upload metadata to IPFS
     console.log("Uploading metadata to IPFS...");
@@ -214,8 +215,8 @@ export async function launchTokenBundled(
     // 4. Build buyer buy TXs with correct V2 instruction format
     const buyerTxs: Transaction[] = [];
 
-    if (activeBuyers.length > 0 && bundleBuyAmountSol > 0) {
-      console.log(`Building ${activeBuyers.length} buyer buy TXs for bundle...`);
+    if (jitoBuyers.length > 0 && bundleBuyAmountSol > 0) {
+      console.log(`Building ${jitoBuyers.length} buyer buy TXs for bundle...`);
 
       const buySolLamports = new BN(Math.floor(bundleBuyAmountSol * 1e9));
 
@@ -224,8 +225,8 @@ export async function launchTokenBundled(
       let curTokenRes = INITIAL_VIRTUAL_TOKEN_RESERVES.sub(devTokensBought);
       let curSolRes = INITIAL_VIRTUAL_SOL_RESERVES.add(devSolLamports);
 
-      for (let i = 0; i < activeBuyers.length; i++) {
-        const buyerKeypair = getKeypair(activeBuyers[i]);
+      for (let i = 0; i < jitoBuyers.length; i++) {
+        const buyerKeypair = getKeypair(jitoBuyers[i]);
 
         // Calculate expected tokens for this buyer
         const expectedTokens = calculateTokensFromSol(curTokenRes, curSolRes, buySolLamports);
@@ -305,6 +306,39 @@ export async function launchTokenBundled(
 
       if (confirmed) {
         console.log("SAME-BLOCK LAUNCH SUCCESS! Mint:", mintAddress);
+
+        // Send extra buyers (wallets 5+) if any
+        if (extraBuyers.length > 0) {
+          console.log(`Sending ${extraBuyers.length} extra buyer buys...`);
+          const { blockhash: freshHash } = await connection.getLatestBlockhash("confirmed");
+          const feeConfig = await onlineSdk.fetchFeeConfig();
+          const { bondingCurveAccountInfo, bondingCurve } =
+            await onlineSdk.fetchBuyState(mintKeypair.publicKey, getKeypair(extraBuyers[0]).publicKey, TOKEN_2022_PROGRAM_ID);
+          const buySolLamports = new BN(Math.floor(bundleBuyAmountSol * 1e9));
+          const tokenAmt = getBuyTokenAmountFromSolAmount({
+            global, feeConfig, mintSupply: bondingCurve.tokenTotalSupply, bondingCurve, amount: buySolLamports,
+          });
+
+          await Promise.all(extraBuyers.map(async (buyer) => {
+            try {
+              const kp = getKeypair(buyer);
+              const ixs = await PUMP_SDK.buyInstructions({
+                global, bondingCurveAccountInfo, bondingCurve,
+                associatedUserAccountInfo: null, mint: mintKeypair.publicKey,
+                user: kp.publicKey, solAmount: buySolLamports, amount: tokenAmt,
+                slippage: 50, tokenProgram: TOKEN_2022_PROGRAM_ID,
+              });
+              const tx = new Transaction().add(...ixs);
+              tx.feePayer = kp.publicKey;
+              tx.recentBlockhash = freshHash;
+              tx.sign(kp);
+              await connection.sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 5 });
+            } catch (e: any) {
+              console.error("Extra buyer failed:", e.message);
+            }
+          }));
+        }
+
         return { success: true, mintAddress, txSignature: bs58.encode(createTx.signature!), timestamp };
       }
 
@@ -321,7 +355,8 @@ export async function launchTokenBundled(
     if (buyerTxs.length > 0) {
       // Rebuild buyer txs with fresh blockhash (old one may be expired)
       const { blockhash: freshHash } = await connection.getLatestBlockhash("confirmed");
-      const freshBuyerTxs = await Promise.all(activeBuyers.map(async (buyer, i) => {
+      const allBuyers = [...jitoBuyers, ...extraBuyers];
+      const freshBuyerTxs = await Promise.all(allBuyers.map(async (buyer, i) => {
         try {
           const buyerKeypair = getKeypair(buyer);
           const buySolLamports = new BN(Math.floor(bundleBuyAmountSol * 1e9));
