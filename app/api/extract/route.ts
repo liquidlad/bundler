@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
       result.metadata.imageUrl = imageUrl;
     }
 
-    return NextResponse.json(result);
+    // Return all available images so user can pick
+    return NextResponse.json({ ...result, availableImages: tweet.mediaUrls });
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Failed to extract metadata" },

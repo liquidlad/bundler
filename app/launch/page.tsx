@@ -20,6 +20,7 @@ export default function LaunchPage() {
   const [bundleBuyAmount, setBundleBuyAmount] = useState("0.1");
   const [walletCount, setWalletCount] = useState("6");
   const [jitoTip, setJitoTip] = useState("0.01");
+  const [availableImages, setAvailableImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<any>(null);
@@ -43,6 +44,7 @@ export default function LaunchPage() {
 
       setExtraction(data);
       setMetadata(data.metadata);
+      setAvailableImages(data.availableImages || []);
       setStep("preview");
     } catch (e: any) {
       setError(e.message);
@@ -246,6 +248,40 @@ export default function LaunchPage() {
               placeholder="https://... or upload coming soon"
             />
           </div>
+          {/* Image picker — shows when multiple images available */}
+          {availableImages.length > 1 && (
+            <div>
+              <label className="label">Select Image ({availableImages.length} available)</label>
+              <div className="flex gap-3 flex-wrap">
+                {availableImages.map((url, i) => (
+                  <button
+                    key={i}
+                    className="relative rounded-lg overflow-hidden border-2 transition-all"
+                    style={{
+                      borderColor: metadata.imageUrl === url ? "var(--accent)" : "var(--border)",
+                      opacity: metadata.imageUrl === url ? 1 : 0.6,
+                    }}
+                    onClick={() => setMetadata({ ...metadata, imageUrl: url })}
+                  >
+                    <img
+                      src={url}
+                      alt={`Image ${i + 1}`}
+                      className="w-20 h-20 object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                    {metadata.imageUrl === url && (
+                      <div
+                        className="absolute inset-0 flex items-center justify-center"
+                        style={{ background: "rgba(0,212,170,0.2)" }}
+                      >
+                        <span className="text-xs font-bold" style={{ color: "var(--accent)" }}>Selected</span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Socials */}
           <div>
             <label className="label">Twitter / X Link</label>
