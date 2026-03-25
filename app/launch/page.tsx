@@ -52,8 +52,17 @@ export default function LaunchPage() {
   }
 
   // Step 2: User reviews and edits metadata, then configures launch
+  // Pre-upload IPFS in background while user configures
   function handleApprove() {
     setStep("configure");
+    // Fire IPFS pre-upload immediately (don't await)
+    if (metadata.imageUrl) {
+      fetch("/api/pre-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata }),
+      }).catch(() => {}); // Silent fail — will retry at launch time
+    }
   }
 
   // Step 3: Launch the token

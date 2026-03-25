@@ -58,10 +58,22 @@ const BUY_DISCRIMINATOR = Buffer.from([102, 6, 61, 18, 1, 218, 235, 234]);
 const INITIAL_VIRTUAL_TOKEN_RESERVES = new BN("1073000000000000");
 const INITIAL_VIRTUAL_SOL_RESERVES = new BN("30000000000");
 
+// IPFS cache shared with pre-upload route
+const ipfsCache = new Map<string, string>();
+export function getIpfsCache(): Map<string, string> { return ipfsCache; }
+
 /**
  * Upload token image + metadata to IPFS via pump.fun API.
+ * Checks cache first (populated by pre-upload during configure step).
  */
 async function uploadToIpfs(imageUrl: string, metadata: TokenMetadata): Promise<string> {
+  // Check if pre-uploaded
+  const cacheKey = `${imageUrl}:${metadata.name}:${metadata.symbol}`;
+  const cached = ipfsCache.get(cacheKey);
+  if (cached) {
+    console.log("IPFS cache hit — skipping upload");
+    return cached;
+  }
   const imgResponse = await fetch(imageUrl);
   if (!imgResponse.ok) throw new Error(`Failed to download image: ${imgResponse.status}`);
   const imgBlob = await imgResponse.blob();
@@ -297,11 +309,11 @@ export async function launchTokenBundled(
       }
     }
 
-    // 6. Verify on-chain
+    // 6. Quick verify — just 3 fast checks then return
     if (jitoSuccess) {
-      console.log("Waiting for on-chain confirmation...");
+      console.log("Jito accepted — quick verify...");
       let confirmed = false;
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 6; i++) {
         await new Promise(r => setTimeout(r, 500));
         if (await connection.getAccountInfo(mintKeypair.publicKey)) {
           confirmed = true;
