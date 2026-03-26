@@ -51,17 +51,21 @@ Phase 5 Flow (future auto-monitor):
 - **Phase 1 DONE:** Token creation + dev buy + same-block buyer buys via Jito bundle
 - **Phase 2 DONE:** Tweet paste → fxtwitter scrape → Claude AI extract → image picker → preview/edit → launch
 - **Phase 3 DONE:** Wallet gen, fund (stealth mode), gather, balance check, enable/disable toggles, vault backup
-- **Phase 4 MOSTLY DONE:** Sell page, per-wallet sell buttons, consolidate-and-sell, position tracker with real P&L
+- **Phase 4 DONE:** Sell page, per-wallet sell buttons, consolidate-and-sell, position tracker with realized P&L
 - **Same-block Jito bundle WORKING:** Correct V2 buy instruction with all 17 accounts. Max 4 buyer wallets in bundle (Jito 5-tx limit). Extra wallets sent after.
 - **IPFS pre-upload:** Uploads during configure step, launch skips upload (~4s faster)
+- **Optimized RPC:** Batched balance calls (1 call instead of 8+), stops polling when no tokens held
+- **P&L fixed:** Shows realized gains after sell (SOL received - cost), not just unrealized value
+- **Cost fixed:** Uses actual enabled wallet count, not manual input
+- **Image picker:** Select from multiple tweet images, pulls from parent/quoted tweets
+- **Startup script:** `start.bat` for one-click launch
 - **Collaborated via:** github.com/better-builders added as collaborator for cross-machine work
 
 ## Known Issues / Next Steps
 1. **Auto-dump on profit** — Not built yet. Future.
 2. **Auto Twitter monitoring** — Not built yet. Future.
 3. **Manual image upload** — Only tweet images supported. File upload TODO.
-4. **OneDrive .next cache** — `.next` build dir gets corrupted by OneDrive sync. Need to `rm -rf .next` before each dev server start.
-5. **Helius rate limits** — Position page polling at 3s can trigger 429s. May need paid RPC tier for heavy use.
+4. **OneDrive .next cache** — `.next` build dir gets corrupted by OneDrive sync. Use `start.bat` or `rm -rf .next` before dev server.
 
 ## Build Phases
 1. ~~**Phase 1 — Core Bundler:**~~ DONE — official pump-fun SDK, wallet gen, create + dev buy + buyer buys
