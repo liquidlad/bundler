@@ -76,7 +76,7 @@ function PositionContent() {
     }
   }, []);
 
-  // Initial load + auto-refresh
+  // Initial load + auto-refresh (only when holding tokens)
   useEffect(() => {
     if (!activeMint) return;
 
@@ -85,6 +85,8 @@ function PositionContent() {
 
     if (autoRefresh) {
       intervalRef.current = setInterval(() => {
+        // Stop polling if no tokens held (already sold)
+        if (position && position.totalTokensFormatted === 0) return;
         fetchPosition(activeMint);
       }, 3000);
     }
@@ -92,7 +94,7 @@ function PositionContent() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [activeMint, autoRefresh, fetchPosition]);
+  }, [activeMint, autoRefresh, fetchPosition, position?.totalTokensFormatted]);
 
   function handleTrack() {
     if (!mintAddress.trim()) return;
@@ -219,6 +221,25 @@ function PositionContent() {
       {/* Position Display */}
       {position && (
         <>
+          {/* Token Address */}
+          <div
+            className="card flex items-center justify-between cursor-pointer transition-colors"
+            style={{ padding: "12px 20px" }}
+            onClick={() => {
+              navigator.clipboard.writeText(activeMint);
+              const el = document.getElementById("copy-feedback");
+              if (el) { el.textContent = "Copied!"; setTimeout(() => { el.textContent = "Click to copy"; }, 1500); }
+            }}
+          >
+            <div>
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>Token Address</p>
+              <p className="font-mono text-sm">{activeMint}</p>
+            </div>
+            <span id="copy-feedback" className="text-xs px-3 py-1 rounded" style={{ color: "var(--accent)", background: "var(--bg-secondary)" }}>
+              Click to copy
+            </span>
+          </div>
+
           {/* P&L Hero */}
           <div
             className="card text-center py-8"

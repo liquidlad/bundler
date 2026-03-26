@@ -98,37 +98,41 @@ export async function POST(req: NextRequest) {
     // Spot price per token (in SOL)
     const spotPrice = bondingCurve.virtualSolReserves.toNumber() / bondingCurve.virtualTokenReserves.toNumber();
 
-    // Gather all wallet balances
+    // Gather all wallet balances in ONE batch call
     const walletPositions: WalletPosition[] = [];
     let totalTokens = new BN(0);
 
-    // Main wallet
+    // Build list of all wallets to check
+    const allWalletsToCheck: { label: string; publicKey: PublicKey }[] = [];
     if (mainKeypair) {
-      const bal = await getTokenBalance(connection, mint, mainKeypair.publicKey, tokenProgram);
-      totalTokens = totalTokens.add(bal);
-      walletPositions.push({
-        label: "main",
-        publicKey: mainKeypair.publicKey.toBase58(),
-        tokenBalance: bal.toString(),
-        tokenBalanceFormatted: bal.toNumber() / 1e6, // pump.fun tokens have 6 decimals
+      allWalletsToCheck.push({ label: "main", publicKey: mainKeypair.publicKey });
+    }
+    for (let i = 0; i < buyerWallets.length; i++) {
+      allWalletsToCheck.push({
+        label: buyerWallets[i].label || `buyer-${i + 1}`,
+        publicKey: new PublicKey(buyerWallets[i].publicKey),
       });
     }
 
-    // Buyer wallets
-    // Check ALL wallets for token balances (not just enabled)
-    const enabledBuyers = buyerWallets;
-    for (let i = 0; i < enabledBuyers.length; i++) {
-      const buyer = enabledBuyers[i];
-      const bal = await getTokenBalance(
-        connection,
-        mint,
-        new PublicKey(buyer.publicKey),
-        tokenProgram
-      );
+    // Derive all ATAs and fetch in one batch
+    const atas = allWalletsToCheck.map(w =>
+      getAssociatedTokenAddress(mint, w.publicKey, false, tokenProgram)
+    );
+    const ataAddresses = await Promise.all(atas);
+    const ataInfos = await connection.getMultipleAccountsInfo(ataAddresses);
+
+    for (let i = 0; i < allWalletsToCheck.length; i++) {
+      let bal = new BN(0);
+      const info = ataInfos[i];
+      if (info && info.data.length >= 72) {
+        // Token account amount is at offset 64, 8 bytes LE
+        const amountBytes = info.data.slice(64, 72);
+        bal = new BN(amountBytes, "le");
+      }
       totalTokens = totalTokens.add(bal);
       walletPositions.push({
-        label: buyer.label || `buyer-${i + 1}`,
-        publicKey: buyer.publicKey,
+        label: allWalletsToCheck[i].label,
+        publicKey: allWalletsToCheck[i].publicKey.toBase58(),
         tokenBalance: bal.toString(),
         tokenBalanceFormatted: bal.toNumber() / 1e6,
       });
