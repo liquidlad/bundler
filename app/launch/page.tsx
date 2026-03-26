@@ -18,13 +18,21 @@ export default function LaunchPage() {
   });
   const [devBuyAmount, setDevBuyAmount] = useState("0.5");
   const [bundleBuyAmount, setBundleBuyAmount] = useState("0.1");
-  const [walletCount, setWalletCount] = useState("6");
+  const [enabledWalletCount, setEnabledWalletCount] = useState(0);
   const [jitoTip, setJitoTip] = useState("0.01");
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<any>(null);
   const router = useRouter();
+
+  // Fetch enabled wallet count on mount
+  useState(() => {
+    fetch("/api/wallets").then(r => r.json()).then(data => {
+      const enabled = (data.wallets || []).filter((w: any) => w.enabled !== false).length;
+      setEnabledWalletCount(enabled);
+    }).catch(() => {});
+  });
 
   // Step 1: Extract metadata from tweet
   async function handleExtract() {
@@ -81,7 +89,7 @@ export default function LaunchPage() {
           metadata,
           devBuyAmountSol: parseFloat(devBuyAmount),
           bundleBuyAmountSol: parseFloat(bundleBuyAmount),
-          buyerWalletCount: parseInt(walletCount),
+          buyerWalletCount: enabledWalletCount,
           jitoTipSol: parseFloat(jitoTip),
         }),
       });
@@ -91,7 +99,7 @@ export default function LaunchPage() {
 
       if (data.success && data.mintAddress) {
         // Auto-redirect to position tracker
-        const cost = parseFloat(devBuyAmount) + parseFloat(bundleBuyAmount) * parseInt(walletCount) + parseFloat(jitoTip);
+        const cost = parseFloat(devBuyAmount) + parseFloat(bundleBuyAmount) * enabledWalletCount + parseFloat(jitoTip);
         router.push(`/position?mint=${data.mintAddress}&cost=${cost.toFixed(4)}`);
         return;
       }
@@ -412,15 +420,11 @@ export default function LaunchPage() {
                 />
               </div>
               <div>
-                <label className="label">Number of Wallets</label>
-                <input
-                  type="number"
-                  className="input-field"
-                  value={walletCount}
-                  onChange={(e) => setWalletCount(e.target.value)}
-                  min="1"
-                  max="8"
-                />
+                <label className="label">Buyer Wallets</label>
+                <div className="input-field flex items-center" style={{ cursor: "default" }}>
+                  <span className="font-bold">{enabledWalletCount}</span>
+                  <span className="text-xs ml-2" style={{ color: "var(--text-secondary)" }}>enabled</span>
+                </div>
               </div>
             </div>
           </div>
@@ -444,7 +448,7 @@ export default function LaunchPage() {
                 <span className="font-bold" style={{ color: "var(--accent)" }}>
                   {(
                     parseFloat(devBuyAmount) +
-                    parseFloat(bundleBuyAmount) * parseInt(walletCount) +
+                    parseFloat(bundleBuyAmount) * enabledWalletCount +
                     parseFloat(jitoTip)
                   ).toFixed(4)}{" "}
                   SOL
@@ -465,7 +469,7 @@ export default function LaunchPage() {
             <strong style={{ color: "var(--text-primary)" }}>${metadata.symbol}</strong> launch breakdown:
             <ul className="mt-2 space-y-1">
               <li>Dev buy: <strong style={{ color: "var(--text-primary)" }}>{devBuyAmount} SOL</strong> from main wallet</li>
-              <li>Bundle buy: <strong style={{ color: "var(--text-primary)" }}>{bundleBuyAmount} SOL</strong> x {walletCount} wallets = <strong style={{ color: "var(--text-primary)" }}>{(parseFloat(bundleBuyAmount) * parseInt(walletCount)).toFixed(4)} SOL</strong></li>
+              <li>Bundle buy: <strong style={{ color: "var(--text-primary)" }}>{bundleBuyAmount} SOL</strong> x {enabledWalletCount} wallets = <strong style={{ color: "var(--text-primary)" }}>{(parseFloat(bundleBuyAmount) * enabledWalletCount).toFixed(4)} SOL</strong></li>
               <li>Jito tip: {jitoTip} SOL</li>
             </ul>
           </div>
@@ -527,7 +531,7 @@ export default function LaunchPage() {
                   className="py-3 px-6 rounded-lg font-bold text-lg"
                   style={{ background: "var(--accent)", color: "#000" }}
                   onClick={() => {
-                    const cost = parseFloat(devBuyAmount) + parseFloat(bundleBuyAmount) * parseInt(walletCount) + parseFloat(jitoTip);
+                    const cost = parseFloat(devBuyAmount) + parseFloat(bundleBuyAmount) * enabledWalletCount + parseFloat(jitoTip);
                     router.push(`/position?mint=${result.mintAddress}&cost=${cost.toFixed(4)}`);
                   }}
                 >
