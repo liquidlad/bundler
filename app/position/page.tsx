@@ -154,7 +154,10 @@ function PositionContent() {
   }
 
   const costBasisNum = parseFloat(costBasis) || 0;
-  const pnlSol = position ? position.realSellValueSol - costBasisNum : 0;
+  // Total value = current token value + any SOL already received from sells
+  const realizedSol = sellResult?.success ? sellResult.solReceived : 0;
+  const totalValue = position ? position.realSellValueSol + realizedSol : realizedSol;
+  const pnlSol = totalValue - costBasisNum;
   const pnlPct = costBasisNum > 0 ? (pnlSol / costBasisNum) * 100 : 0;
   const isProfit = pnlSol >= 0;
 
@@ -225,13 +228,15 @@ function PositionContent() {
             }}
           >
             <p className="text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
-              If you sell everything now, you get:
+              {realizedSol > 0
+                ? (position.realSellValueSol > 0 ? "Sold + remaining value:" : "Total received from sell:")
+                : "If you sell everything now, you get:"}
             </p>
             <p
               className="text-5xl font-bold tracking-tight"
               style={{ color: isProfit ? "var(--accent)" : "var(--danger)" }}
             >
-              {position.realSellValueSol.toFixed(4)} SOL
+              {totalValue.toFixed(4)} SOL
             </p>
 
             {costBasisNum > 0 && (
